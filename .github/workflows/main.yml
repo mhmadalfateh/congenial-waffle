@@ -7,15 +7,12 @@ on:
       - main
       - master
 
-permissions:
-  contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Download project
         uses: actions/checkout@v4
 
       - name: Setup Java
@@ -24,46 +21,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract project ZIP
-        shell: bash
-        run: |
-          set -e
-          ZIP_FILE=$(find . -maxdepth 2 -type f -iname "*.zip" | head -n 1)
-
-          if [ -n "$ZIP_FILE" ]; then
-            mkdir -p extracted
-            unzip -o "$ZIP_FILE" -d extracted
-            if [ -f extracted/settings.gradle ]; then
-              cp -a extracted/. .
-            else
-              PROJECT_DIR=$(find extracted -name settings.gradle -print -quit | xargs -r dirname)
-              if [ -z "$PROJECT_DIR" ]; then
-                echo "No Android project found inside ZIP"
-                exit 1
-              fi
-              cp -a "$PROJECT_DIR"/. .
-            fi
-          fi
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK packages
-        shell: bash
+      - name: Accept Android licenses
         run: |
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          sdkmanager --licenses < /dev/null || true
 
-      - name: Accept SDK licenses
-        run: yes | sdkmanager --licenses || true
+      - name: Install SDK
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Check Android project
+      - name: Check project
         run: |
           test -f settings.gradle
+          test -f build.gradle
           test -f app/build.gradle
           test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/assets/index.html
 
       - name: Build APK
         run: gradle --no-daemon assembleDebug
