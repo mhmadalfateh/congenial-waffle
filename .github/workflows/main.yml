@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Java
@@ -21,65 +21,41 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # فك ضغط ملف المشروع تلقائياً
-      - name: Extract ZIP project
+      - name: Install Android SDK tools
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: Extract ZIP
         shell: bash
         run: |
           set -e
-
-          ZIP_FILE=$(find "$GITHUB_WORKSPACE" \
-            -maxdepth 2 -type f \
-            -iname "Mustawda-APK-Project.zip" \
-            -print -quit)
+          ZIP_FILE=$(find . -maxdepth 2 -type f -iname '*.zip' -print -quit)
 
           if [ -z "$ZIP_FILE" ]; then
-            ZIP_FILE=$(find "$GITHUB_WORKSPACE" \
-              -maxdepth 2 -type f -iname "*.zip" \
-              -print -quit)
-          fi
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No ZIP file found in repository"
+            echo "ERROR: ZIP file not found"
             exit 1
           fi
 
-          mkdir -p "$RUNNER_TEMP/project"
-          unzip -o "$ZIP_FILE" -d "$RUNNER_TEMP/project"
+          mkdir -p extracted
+          unzip -o "$ZIP_FILE" -d extracted
 
-          PROJECT_DIR=$(find "$RUNNER_TEMP/project" \
-            -name settings.gradle -type f \
-            -print -quit | xargs -r dirname)
+          PROJECT_DIR=$(find extracted -name settings.gradle -type f -print -quit | xargs -r dirname)
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: ZIP does not contain an Android project"
-            find "$RUNNER_TEMP/project" -maxdepth 4 -type f
+            echo "ERROR: Android project not found inside ZIP"
             exit 1
           fi
 
-          cp -a "$PROJECT_DIR"/. "$GITHUB_WORKSPACE"/
+          cp -a "$PROJECT_DIR"/. .
 
-          echo "Project extracted successfully"
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses
+      - name: Accept licenses
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          yes | sdkmanager --licenses || true
 
-      - name: Install Android SDK
+      - name: Install SDK packages
         run: |
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Check project files
-        run: |
-          test -f settings.gradle
-          test -f app/build.gradle
-          test -f app/src/main/AndroidManifest.xml
-          test -f app/src/main/assets/index.html
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Build APK
         run: gradle --no-daemon assembleDebug
