@@ -15,54 +15,55 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Find and extract project ZIP
+      - name: Extract project ZIP
         shell: bash
         run: |
           set -e
           ZIP_FILE=$(find . -maxdepth 2 -type f -iname "*.zip" | head -n 1)
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No ZIP file found in repository."
-            exit 1
-          fi
-
-          echo "Found ZIP: $ZIP_FILE"
-          mkdir -p extracted
-          unzip -o "$ZIP_FILE" -d extracted
-
-          if [ -f extracted/settings.gradle ]; then
-            cp -a extracted/. .
-          else
-            PROJECT_DIR=$(find extracted -name settings.gradle -print -quit | xargs -r dirname)
-
-            if [ -z "$PROJECT_DIR" ]; then
-              echo "ERROR: No Android project found inside ZIP."
-              find extracted -maxdepth 4 -type f
-              exit 1
+          if [ -n "$ZIP_FILE" ]; then
+            mkdir -p extracted
+            unzip -o "$ZIP_FILE" -d extracted
+            if [ -f extracted/settings.gradle ]; then
+              cp -a extracted/. .
+            else
+              PROJECT_DIR=$(find extracted -name settings.gradle -print -quit | xargs -r dirname)
+              if [ -z "$PROJECT_DIR" ]; then
+                echo "No Android project found inside ZIP"
+                exit 1
+              fi
+              cp -a "$PROJECT_DIR"/. .
             fi
-
-            cp -a "$PROJECT_DIR"/. .
           fi
 
-      - name: Set up Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept SDK licenses
+      - name: Install Android SDK packages
+        shell: bash
         run: |
-          yes | sdkmanager --licenses || true
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
-      - name: Install SDK packages
+      - name: Accept SDK licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Check Android project
         run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          test -f settings.gradle
+          test -f app/build.gradle
+          test -f app/src/main/AndroidManifest.xml
 
       - name: Build APK
         run: gradle --no-daemon assembleDebug
