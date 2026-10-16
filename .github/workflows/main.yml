@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download project
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Java
@@ -21,21 +21,62 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # فك ضغط ملف المشروع تلقائياً
+      - name: Extract ZIP project
+        shell: bash
+        run: |
+          set -e
+
+          ZIP_FILE=$(find "$GITHUB_WORKSPACE" \
+            -maxdepth 2 -type f \
+            -iname "Mustawda-APK-Project.zip" \
+            -print -quit)
+
+          if [ -z "$ZIP_FILE" ]; then
+            ZIP_FILE=$(find "$GITHUB_WORKSPACE" \
+              -maxdepth 2 -type f -iname "*.zip" \
+              -print -quit)
+          fi
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No ZIP file found in repository"
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/project"
+          unzip -o "$ZIP_FILE" -d "$RUNNER_TEMP/project"
+
+          PROJECT_DIR=$(find "$RUNNER_TEMP/project" \
+            -name settings.gradle -type f \
+            -print -quit | xargs -r dirname)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: ZIP does not contain an Android project"
+            find "$RUNNER_TEMP/project" -maxdepth 4 -type f
+            exit 1
+          fi
+
+          cp -a "$PROJECT_DIR"/. "$GITHUB_WORKSPACE"/
+
+          echo "Project extracted successfully"
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android licenses
+      - name: Accept Android SDK licenses
         run: |
-          sdkmanager --licenses < /dev/null || true
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
-      - name: Install SDK
+      - name: Install Android SDK
         run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
-      - name: Check project
+      - name: Check project files
         run: |
           test -f settings.gradle
-          test -f build.gradle
           test -f app/build.gradle
           test -f app/src/main/AndroidManifest.xml
           test -f app/src/main/assets/index.html
